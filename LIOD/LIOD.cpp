@@ -16,6 +16,11 @@ using namespace std;
 namespace fs = std::filesystem;
 using namespace cv;
 
+class Box {
+public:
+    int class_id;
+    double x_center, y_center, width, height;
+};
 
 struct YOLO_RECT {
     float x_center;
@@ -24,96 +29,20 @@ struct YOLO_RECT {
     float height;
 };
 
-YOLO_RECT COCO2YOLO(cv::Rect coco_rect, int width, int height)
-{
-    float x_center = (1.0 * coco_rect.x + coco_rect.width / 2.0) / width;
-    float y_center = (1.0 * coco_rect.y + coco_rect.height / 2.0) / height;
-    float bb_width = 1.0 * coco_rect.width / width;
-    float bb_height = 1.0 * coco_rect.height / height;
+YOLO_RECT COCO2YOLO(cv::Rect coco_rect, int width, int height);
 
-    YOLO_RECT rect = { x_center, y_center, bb_width, bb_height };
-    return rect;
-}
-
-
-cv::Mat get_mat_fromfile(std::string fullfilename, int rows, int cols)
-{
-    cv::Mat matrix(rows, cols, CV_32SC1);
-    std::ifstream depth_file(fullfilename);
-    // read the matrix elements
-    for (int i = 0; i < rows; i++) {
-        for (int j = 0; j < cols; j++) {
-            depth_file >> matrix.at<int>(i, j);
-        }
-    }
-    return matrix;
-}
-
-
-
-class Box {
-public:
-    int class_id;
-    double x_center, y_center, width, height;
-};
+cv::Mat get_mat_fromfile(std::string fullfilename, int rows, int cols);
 
 // 读取文件中的边界框信息
-vector<Box> read_boxes_from_file(string filepath) {
-    vector<Box> boxes;
-    ifstream infile(filepath);
-
-    string line;
-    while (getline(infile, line)) {
-        istringstream iss(line);
-        Box box;
-        iss >> box.class_id >> box.x_center >> box.y_center >> box.width >> box.height;
-        boxes.push_back(box);
-    }
-
-    return boxes;
-}
+vector<Box> read_boxes_from_file(string filepath);
 
 // 计算两个边界框的 IoU 值
-double cal_iou(Box box1, Box box2) {
-    double left = max(box1.x_center - box1.width / 2., box2.x_center - box2.width / 2.);
-    double right = min(box1.x_center + box1.width / 2., box2.x_center + box2.width / 2.);
-    double top = max(box1.y_center - box1.height / 2., box2.y_center - box2.height / 2.);
-    double bottom = min(box1.y_center + box1.height / 2., box2.y_center + box2.height / 2.);
-
-    double intersection_area = 0;
-    if (left < right && top < bottom) {
-        intersection_area = (right - left) * (bottom - top);
-    }
-
-    double union_area = box1.width * box1.height + box2.width * box2.height - intersection_area;
-
-    return intersection_area / union_area;
-}
+double cal_iou(Box box1, Box box2);
 
 // 计算 IoU 阈值下的正检个数
-int count_tp_by_iou_thresh(double iou_thresh, string gt_filepath, string pred_filepath) {
+int count_tp_by_iou_thresh(double iou_thresh, string gt_filepath, string pred_filepath);
 
-    vector<Box> true_boxes = read_boxes_from_file(gt_filepath);
-    vector<Box> pred_boxes = read_boxes_from_file(pred_filepath);
-    int num_tp = 0;
-
-    for (Box pred_box : pred_boxes) {
-        bool is_matched = false;
-        double max_iou = 0;
-        for (Box true_box : true_boxes) {
-            double iou = cal_iou(true_box, pred_box);
-            if (iou >= iou_thresh && iou > max_iou) {
-                is_matched = true;
-                max_iou = iou;
-            }
-        }
-        if (is_matched) {
-            num_tp++;
-        }
-    }
-
-    return num_tp;
-}
+bool isPostiveBB();
 
 int main()
 {
@@ -165,7 +94,12 @@ int main()
         // Draw the boundingbox
         cv::Scalar color(0, 0, 255);
         int thickness = 3; int bbnum = 0;
-        for (auto& bb : BBVector) {
+        for (auto it = BBVector.begin(); it != BBVector.end(); it++) {
+            auto bb = *it;
+
+            if (!isPostiveBB()) {
+                continue;
+            }
 
             rectangle(image_mat, bb.tl(), bb.br(), color, thickness);
 
@@ -184,7 +118,6 @@ int main()
                     if (depth_mat.at<int>(i, j) != 0) {
                         dnum++;
                     }
-
                 }
             }
             if (dnum == 0) averageValue = 0;
@@ -252,7 +185,88 @@ int main()
     }
 }
 
+int count_tp_by_iou_thresh(double iou_thresh, string gt_filepath, string pred_filepath) {
 
+    vector<Box> true_boxes = read_boxes_from_file(gt_filepath);
+    vector<Box> pred_boxes = read_boxes_from_file(pred_filepath);
+    int num_tp = 0;
+
+    for (Box pred_box : pred_boxes) {
+        bool is_matched = false;
+        double max_iou = 0;
+        for (Box true_box : true_boxes) {
+            double iou = cal_iou(true_box, pred_box);
+            if (iou >= iou_thresh && iou > max_iou) {
+                is_matched = true;
+                max_iou = iou;
+            }
+        }
+        if (is_matched) {
+            num_tp++;
+        }
+    }
+
+    return num_tp;
+}
+
+double cal_iou(Box box1, Box box2) {
+    double left = max(box1.x_center - box1.width / 2., box2.x_center - box2.width / 2.);
+    double right = min(box1.x_center + box1.width / 2., box2.x_center + box2.width / 2.);
+    double top = max(box1.y_center - box1.height / 2., box2.y_center - box2.height / 2.);
+    double bottom = min(box1.y_center + box1.height / 2., box2.y_center + box2.height / 2.);
+
+    double intersection_area = 0;
+    if (left < right && top < bottom) {
+        intersection_area = (right - left) * (bottom - top);
+    }
+
+    double union_area = box1.width * box1.height + box2.width * box2.height - intersection_area;
+
+    return intersection_area / union_area;
+}
+
+vector<Box> read_boxes_from_file(string filepath) {
+    vector<Box> boxes;
+    ifstream infile(filepath);
+
+    string line;
+    while (getline(infile, line)) {
+        istringstream iss(line);
+        Box box;
+        iss >> box.class_id >> box.x_center >> box.y_center >> box.width >> box.height;
+        boxes.push_back(box);
+    }
+
+    return boxes;
+}
+
+cv::Mat get_mat_fromfile(std::string fullfilename, int rows, int cols)
+{
+    cv::Mat matrix(rows, cols, CV_32SC1);
+    std::ifstream depth_file(fullfilename);
+    // read the matrix elements
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            depth_file >> matrix.at<int>(i, j);
+        }
+    }
+    return matrix;
+}
+
+YOLO_RECT COCO2YOLO(cv::Rect coco_rect, int width, int height)
+{
+    float x_center = (1.0 * coco_rect.x + coco_rect.width / 2.0) / width;
+    float y_center = (1.0 * coco_rect.y + coco_rect.height / 2.0) / height;
+    float bb_width = 1.0 * coco_rect.width / width;
+    float bb_height = 1.0 * coco_rect.height / height;
+
+    YOLO_RECT rect = { x_center, y_center, bb_width, bb_height };
+    return rect;
+}
+
+bool isPostiveBB() {
+    return true;
+}
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
 // Debug program: F5 or Debug > Start Debugging menu
 
