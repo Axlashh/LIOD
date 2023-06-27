@@ -3,11 +3,11 @@
 #define _CRT_SECURE_NO_WARNINGS
 
 namespace fs = std::filesystem;
-using std::string;
+using namespace std;
 using cv::Scalar;
 using cv::Point;
 
-int group = 1;
+int group = 0;
 int nummm = 0;
 time_t timep;
 struct tm* t;
@@ -32,12 +32,15 @@ const char* out = "D:\\AAAAAAA\\documents\\scitri\\data\\output\\%d_%d_%d_%d_%02
 //the number of seqence to be detected
 int seq_num = 1;
 //the initial seqence
-int init_seq = 45;
+int init_seq = 33;
 //only detect the movement(skip 2 seqences each time)
 bool only_move = true;
 //the pause time between two pictures
-int pause_time = 10;
-using namespace std;
+int pause_time = 1;
+//camera static
+int fx = 100;
+int fy = 100;
+
 int main()
 {
 	//create the output directory with time information
@@ -301,32 +304,43 @@ TY_CAMERA_CALIB_INFO* read_calib(string path) {
 bool isPostiveBB_BL(cv::Rect rec, cv::Mat depth_mat) {
 	cv::Mat rigion = depth_mat(rec).clone();
 	cv::Mat bb_depth = cv::Mat::zeros(depth_mat.rows, depth_mat.cols, depth_mat.type());
-	//for (int i = 0; i < rigion.rows; i++) {
-	//	for (int j = 0; j < rigion.cols; j++) {
-	//		bb_depth.at<int32_t>(rec.x + i, rec.y + j) = rigion.at<int32_t>(i, j);
-	//	}
-	//}
+	for (int i = 0; i < rigion.cols; i++) {
+		for (int j = 0; j < rigion.rows; j++) {
+			bb_depth.at<int32_t>(rec.y + j, rec.x + i) = rigion.at<int32_t>(j, i);
+		}
+	}
 	std::vector<TY_VECT_3F> pc;
-	bb_depth = depth_mat;
 	pc.resize(bb_depth.size().area());
-	TYMapDepthImageToPoint3d(read_calib(calib_path), bb_depth.cols, bb_depth.rows
-					, (uint16_t*)bb_depth.data, &pc[0]);
-	std::string pa = point_cloud_path + std::to_string(group) + "//";
-	fs::create_directory(pa);
-	std::string f_path = pa + std::to_string(nummm++) + ".txt";
-	//std::string ff_path = pa + "kk" + std::to_string(nummm++) + ".txt";
-	//WriteData(f_path, depth_mat);
-	//WriteData(ff_path, rigion);
-	cv::Mat color;
-	writePointCloud((cv::Point3f*)&pc[0], (const cv::Vec3b*)color.data, pc.size(), f_path.c_str(), 0);
+	//TYMapDepthImageToPoint3d(read_calib(calib_path), bb_depth.cols, bb_depth.rows
+	//				, (uint16_t*)bb_depth.data, &pc[0]);
+	auto point3d = Depth2PointCloud(bb_depth);
+	//std::string pa = point_cloud_path + std::to_string(group) + "//";
+	//fs::create_directory(pa);
+	//std::string f_path = pa + std::to_string(nummm++) + ".txt";
+	//writePointCloud(point3d, f_path.c_str());
+	if (point3d->size() == 0) return true;
+	long long y = point3d->at(0).y;
+	cout << y << endl;
+	if (y < -500) return false;
 	return true;
+}
+
+void writePointCloud(const std::vector<vec_3d>* pnts, const char* file) {
+	FILE* fp = nullptr;
+	errno_t err = fopen_s(&fp, file, "w");
+	if (err) return;
+
+	for (auto& p : *pnts) {
+		fprintf(fp, "%f %f %f\n", p.x, p.y, p.z);
+	}
+	fclose(fp);
 }
 
 static void writePointCloud(const cv::Point3f* pnts, const cv::Vec3b* color, size_t n, const char* file, int format)
 {
 	FILE* fp = nullptr;
 	errno_t err = fopen_s(&fp, file, "w");
-	//if (err != 0) {
+	//if (err) {
 	//	return;
 	//}
 
@@ -393,6 +407,21 @@ int WriteData(std::string fileName, cv::Mat& matData)
 	return (retVal);
 }
 
+std::vector<vec_3d>* Depth2PointCloud(cv::Mat depth_mat) {
+	std::vector<vec_3d>* ret = new std::vector<vec_3d>();
+	int x_cen = depth_mat.cols / 2;
+	int y_cen = depth_mat.rows / 2;
+	for (int i = 0; i < depth_mat.rows; i++) {
+		for (int j = 0; j < depth_mat.cols; j++) {
+			float dep = depth_mat.at<int32_t>(i, j);
+			if (!dep) continue;
+			float tx = (j - x_cen) * dep / fx;
+			float ty = (i - y_cen) * dep / fy;
+			ret->push_back({ tx, ty, dep });
+		}
+	}
+	return ret;
+}
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
 // Debug program: F5 or Debug > Start Debugging menu
 

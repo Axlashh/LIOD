@@ -31,6 +31,12 @@ struct YOLO_RECT {
     float height;
 };
 
+typedef struct vec_3d {
+    float x;
+    float y;
+    float z;
+}vec_3d;
+
 YOLO_RECT COCO2YOLO(cv::Rect coco_rect, int width, int height);
 
 cv::Mat get_mat_fromfile(std::string fullfilename, int rows, int cols);
@@ -49,6 +55,11 @@ bool isPostiveBB_BL(cv::Rect rec, cv::Mat depth_mat);
 
 //读取calib
 TY_CAMERA_CALIB_INFO* read_calib(std::string path);
+
+//简易点云
+std::vector<vec_3d>* Depth2PointCloud(cv::Mat depth_mat);
+
+void writePointCloud(const std::vector<vec_3d>* pnts, const char* file);
 
 //偷的
 static void writePointCloud(const cv::Point3f* pnts, const cv::Vec3b* color, size_t n, const char* file, int format);
