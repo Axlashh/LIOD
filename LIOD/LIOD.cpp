@@ -1,95 +1,53 @@
 // LIOD.cpp : This file contains the 'main' function. Program execution begins and ends there.
-//
+#include "LIOD.h"
 
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <filesystem>
-#include <opencv2/opencv.hpp>
-#include "Detect.h"
-#include "ctime"
-#include <sstream>
-#include <string>
-#include <cmath>
-#include <TYCoordinateMapper.h>
-#include <algorithm>
-#include <Shlwapi.h>
-#pragma comment(lib,"Shlwapi.lib")
-
-using namespace std;
 namespace fs = std::filesystem;
-using namespace cv;
+using std::string;
+using cv::Scalar;
+using cv::Point;
 
-class Box {
-public:
-    int class_id;
-    double x_center, y_center, width, height;
-};
+// input info
+std::string input_depthPath;
+std::string input_gt_bbPath;
+std::string input_imagePath;
+// output info
+std::string output_imagePath;
+std::string output_bboxPath;
+double iou_thresh = 0.3f;
 
-struct YOLO_RECT {
-    float x_center;
-    float y_center;
-    float width;
-    float height;
-};
+std::string output_path;
+std::string input_path = "D:\\AAAAAAA\\documents\\scitri\\data\\input\\";
 
-YOLO_RECT COCO2YOLO(cv::Rect coco_rect, int width, int height);
-
-cv::Mat get_mat_fromfile(std::string fullfilename, int rows, int cols);
-
-// 读取文件中的边界框信息
-vector<Box> read_boxes_from_file(string filepath);
-
-// 计算两个边界框的 IoU 值
-double cal_iou(Box box1, Box box2);
-
-// 计算 IoU 阈值下的正检个数
-int count_tp_by_iou_thresh(double iou_thresh, string gt_filepath, string pred_filepath);
-
-//判断是否为正检框
-bool isPostiveBB();
-
-
+char tout[200];
 const char* out = "D:\\AAAAAAA\\documents\\scitri\\data\\output\\%d_%d_%d_%d_%02d\\";
+
+//the number of seqence to be detected
+int seq_num = 1;
+//the initial seqence
+int init_seq = 45;
+//only detect the movement(skip 2 seqences each time)
+bool only_move = true;
+//the pause time between two pictures
+int pause_time = 10;
 
 int main()
 {
-    int seq_num = 1;
-    int init_seq = 3;
-    bool only_move = true;
-
-
-	char tout[200];
+	//create the output directory with time information
     time_t timep;
     time(&timep);
 	struct tm* t = new struct tm; 
 	localtime_s(t, &timep);
     sprintf_s(tout, sizeof(tout), out, 1900 + t->tm_year,1 + t->tm_mon, t->tm_wday, t->tm_hour, t->tm_min);
-    std::string output_path = tout;
-    std::string input_path = "D:\\AAAAAAA\\documents\\scitri\\data\\input\\";
-	if (!fs::exists(output_path)) {
+    output_path = tout;
+ 	if (!fs::exists(output_path)) {
 		fs::create_directory(output_path);
 	}
-
-    // input info
-    std::ifstream input_imageList("C:\\Users\\XJH\\Desktop\\pipe\\Data\\input\\seq06\\images\\filename_list.txt");
-    std::string input_depthPath = "C:\\Users\\XJH\\Desktop\\pipe\\Data\\input\\seq06\\depth";
-    std::string input_gt_bbPath = "C:\\Users\\XJH\\Desktop\\pipe\\Data\\input\\seq06\\gt_bb";
-	std::string input_imagePath;
-    // output info
-    std::string output_imagePath = "C:\\Users\\XJH\\Desktop\\pipe\\Data\\output\\pred\\seq06\\images";
-    std::string output_bboxPath = "C:\\Users\\XJH\\Desktop\\pipe\\Data\\output\\pred\\seq06\\pred_bb";
-    double iou_thresh = 0.3f;
-    // Open the list file.
-    //if (!input_imageList) {
-    //    std::cerr << "Error: could not open list file.\n";
-    //    return 1;
-    //}
 
     // Read each line of the list file and load the corresponding image file.
     std::string image_fullfilename;
     std::vector<cv::Rect> BBVector;
 	while (seq_num--) {
+		//get the corresponding seqence
 		std::ostringstream tseq;
 		tseq << "seq" << std::setfill('0') << std::setw(2) << std::to_string(init_seq);
 		std::string seq = tseq.str();
@@ -101,13 +59,15 @@ int main()
 		fs::create_directories(output_imagePath);
 		fs::create_directories(output_bboxPath);
 
+		//add all jpg files' path to the vector
 		std::vector<std::string> files;
 		for (const auto& f : fs::directory_iterator(input_imagePath)) {
 			if (f.path().extension() == ".jpg")
 				files.push_back(f.path().string());
 		}
 
-		for (auto& img : files) {
+		//iterate all the files
+		for (auto& image_fullfilename : files) {
 			fs::path p(image_fullfilename);
 			std::string fileName = p.filename().string();
 			size_t dotPos = fileName.find_last_of(".");
@@ -115,8 +75,6 @@ int main()
 			std::cout << image_fullfilename << std::endl;
 
 			// Read image from a file
-
-
 			cv::Mat image_mat = cv::imread(image_fullfilename);
 			if (image_mat.empty()) {
 				std::cerr << "Error: could not load image file " << image_fullfilename << ".\n";
@@ -138,10 +96,11 @@ int main()
 			// Draw the boundingbox
 			cv::Scalar color(0, 0, 255);
 			int thickness = 3; int bbnum = 0;
-			for (auto it = BBVector.begin(); it != BBVector.end(); it++) {
-				auto bb = *it;
+			for (auto it = BBVector.begin(); it != BBVector.end();) {
+				cv::Rect bb = *it;
 
-				if (!isPostiveBB()) {
+				if (!isPostiveBB_BL(bb, depth_mat)) {
+					it = BBVector.erase(it);
 					continue;
 				}
 
@@ -172,13 +131,13 @@ int main()
 				std::ostringstream ss1, ss2;
 				ss1 << "A:" << (int)bb.area();
 				ss2 << "D:" << (int)averageValue;
-				String text1 = ss1.str();
-				String text2 = ss2.str();
+				string text1 = ss1.str();
+				string text2 = ss2.str();
 				Point pos1(bb.x, bb.y - 5);
 				Point pos2(bb.x, bb.y - 18);
 
 				// 定义字体类型和大小
-				int fontface = FONT_HERSHEY_SIMPLEX;
+				int fontface = cv::FONT_HERSHEY_SIMPLEX;
 				double fontsize = 0.4;
 
 				// 定义文字的颜色和厚度
@@ -189,6 +148,7 @@ int main()
 				cv::putText(image_mat, text1, pos1, fontface, fontsize, t_color, t_thickness);
 				cv::putText(image_mat, text2, pos2, fontface, fontsize, t_color, t_thickness);
 
+				it++;
 			}
 			// Write image and bbox to files
 
@@ -204,11 +164,11 @@ int main()
 			// 击中数和处理时间
 			std::ostringstream ss3;
 			ss3 << "hits = " << bbnum << " " << "time=" << elapsed_secs * 1000 << "ms";
-			String text3 = ss3.str();
+			string text3 = ss3.str();
 			Point pos3(10, 30);
 
 			// 定义字体类型和大小
-			int fontface = FONT_HERSHEY_SIMPLEX;
+			int fontface = cv::FONT_HERSHEY_SIMPLEX;
 			double fontsize = 0.8;
 
 			// 定义文字的颜色和厚度
@@ -223,7 +183,7 @@ int main()
 
 			// Show image
 			cv::imshow("current image", image_mat);
-			cv::waitKey(40);
+			cv::waitKey(pause_time);
 
 		}
 	}
@@ -231,7 +191,7 @@ int main()
 	return 0;
 }
 
-int count_tp_by_iou_thresh(double iou_thresh, string gt_filepath, string pred_filepath){
+int count_tp_by_iou_thresh(double iou_thresh, std::string gt_filepath, std::string pred_filepath){
 
 	std::vector<Box> true_boxes = read_boxes_from_file(gt_filepath);
     std::vector<Box> pred_boxes = read_boxes_from_file(pred_filepath);
@@ -271,13 +231,13 @@ double cal_iou(Box box1, Box box2) {
     return intersection_area / union_area;
 }
 
-vector<Box> read_boxes_from_file(string filepath) {
-    vector<Box> boxes;
-    ifstream infile(filepath);
+std::vector<Box> read_boxes_from_file(std::string filepath) {
+	std::vector<Box> boxes;
+	std::ifstream infile(filepath);
 
-    string line;
-    while (getline(infile, line)) {
-        istringstream iss(line);
+	std::string line;
+    while (std::getline(infile, line)) {
+		std::istringstream iss(line);
         Box box;
         iss >> box.class_id >> box.x_center >> box.y_center >> box.width >> box.height;
         boxes.push_back(box);
@@ -310,7 +270,7 @@ YOLO_RECT COCO2YOLO(cv::Rect coco_rect, int width, int height)
     return rect;
 }
 
-bool isPostiveBB() {
+bool isPostiveBB_BL(cv::Rect rec, cv::Mat depth_mat) {
     return true;
 }
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
