@@ -47,4 +47,7 @@ int count_tp_by_iou_thresh(double iou_thresh, std::string gt_filepath, std::stri
 //判断是否为正检框，基础版本
 bool isPostiveBB_BL(cv::Rect rec, cv::Mat depth_mat);
 
+//读取calib
+TY_CAMERA_CALIB_INFO* read_calib(std::string path);
+
 #endif

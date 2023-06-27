@@ -17,6 +17,7 @@ double iou_thresh = 0.3f;
 
 std::string output_path;
 std::string input_path = "D:\\AAAAAAA\\documents\\scitri\\data\\input\\";
+std::string calib_path = "D:\\AAAAAAA\\documents\\scitri\\data\\calib\\1.txt";
 
 char tout[200];
 const char* out = "D:\\AAAAAAA\\documents\\scitri\\data\\output\\%d_%d_%d_%d_%02d\\";
@@ -29,7 +30,7 @@ int init_seq = 45;
 bool only_move = true;
 //the pause time between two pictures
 int pause_time = 10;
-
+using namespace std;
 int main()
 {
 	//create the output directory with time information
@@ -270,7 +271,25 @@ YOLO_RECT COCO2YOLO(cv::Rect coco_rect, int width, int height)
     return rect;
 }
 
+TY_CAMERA_CALIB_INFO* read_calib(string path) {
+	TY_CAMERA_CALIB_INFO* ret = new TY_CAMERA_CALIB_INFO();
+	std::ifstream inputFile(path);
+	if (inputFile.is_open()) {
+		inputFile >> ret->intrinsicWidth;
+		inputFile >> ret->intrinsicHeight;
+		for (int i = 0; i < 9; i++) 
+			inputFile >> ret->intrinsic.data[i];
+		for (int i = 0; i < 16; i++) 
+			inputFile >> ret->extrinsic.data[i];
+		for (int i = 0; i < 12; i++)
+			inputFile >> ret->distortion.data[i];
+	}
+	inputFile.close();
+	return ret;
+}
+
 bool isPostiveBB_BL(cv::Rect rec, cv::Mat depth_mat) {
+//	TYMapDepthToPoint3d(read_calib(calib_path), );
     return true;
 }
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
