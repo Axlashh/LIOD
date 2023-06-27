@@ -186,8 +186,8 @@ int main()
 				int t_thickness = 0.6;
 
 				// 在图片上添加文字
-				putText(image_mat, text1, pos1, fontface, fontsize, t_color, t_thickness);
-				putText(image_mat, text2, pos2, fontface, fontsize, t_color, t_thickness);
+				cv::putText(image_mat, text1, pos1, fontface, fontsize, t_color, t_thickness);
+				cv::putText(image_mat, text2, pos2, fontface, fontsize, t_color, t_thickness);
 
 			}
 			// Write image and bbox to files
@@ -215,7 +215,7 @@ int main()
 			Scalar t_color(255, 192, 203);
 			int t_thickness = 2;
 
-			putText(image_mat, text3, pos3, fontface, fontsize, t_color, t_thickness);
+			cv::putText(image_mat, text3, pos3, fontface, fontsize, t_color, t_thickness);
 
 			// Write image and bbox to files
 			std::string output_imageFileName = output_imagePath + fileName.substr(0, dotPos) + ".jpg";
