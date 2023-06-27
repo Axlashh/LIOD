@@ -50,4 +50,9 @@ bool isPostiveBB_BL(cv::Rect rec, cv::Mat depth_mat);
 //¶ÁÈ¡calib
 TY_CAMERA_CALIB_INFO* read_calib(std::string path);
 
+//ÍµµÄ
+static void writePointCloud(const cv::Point3f* pnts, const cv::Vec3b* color, size_t n, const char* file, int format);
+static void writePC_XYZ(const cv::Point3f* pnts, const cv::Vec3b* color, size_t n, FILE* fp);
+int WriteData(std::string fileName, cv::Mat& matData);
+
 #endif

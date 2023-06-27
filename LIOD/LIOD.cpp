@@ -1,10 +1,16 @@
 // LIOD.cpp : This file contains the 'main' function. Program execution begins and ends there.
 #include "LIOD.h"
+#define _CRT_SECURE_NO_WARNINGS
 
 namespace fs = std::filesystem;
 using std::string;
 using cv::Scalar;
 using cv::Point;
+
+int group = 1;
+int nummm = 0;
+time_t timep;
+struct tm* t;
 
 // input info
 std::string input_depthPath;
@@ -18,6 +24,7 @@ double iou_thresh = 0.3f;
 std::string output_path;
 std::string input_path = "D:\\AAAAAAA\\documents\\scitri\\data\\input\\";
 std::string calib_path = "D:\\AAAAAAA\\documents\\scitri\\data\\calib\\1.txt";
+std::string point_cloud_path = "D:\\AAAAAAA\\documents\\scitri\\data\\point_cloud\\";
 
 char tout[200];
 const char* out = "D:\\AAAAAAA\\documents\\scitri\\data\\output\\%d_%d_%d_%d_%02d\\";
@@ -34,9 +41,8 @@ using namespace std;
 int main()
 {
 	//create the output directory with time information
-    time_t timep;
-    time(&timep);
-	struct tm* t = new struct tm; 
+	time(&timep);
+	t = new struct tm; 
 	localtime_s(t, &timep);
     sprintf_s(tout, sizeof(tout), out, 1900 + t->tm_year,1 + t->tm_mon, t->tm_wday, t->tm_hour, t->tm_min);
     output_path = tout;
@@ -57,8 +63,10 @@ int main()
 		input_imagePath = input_path + seq + "\\images\\";
 		output_imagePath = output_path + seq + "\\images\\";
 		output_bboxPath = output_path + seq + "\\pred__bb\\";
+		point_cloud_path = point_cloud_path + seq + "21\\";
 		fs::create_directories(output_imagePath);
 		fs::create_directories(output_bboxPath);
+		fs::create_directories(point_cloud_path);
 
 		//add all jpg files' path to the vector
 		std::vector<std::string> files;
@@ -97,6 +105,8 @@ int main()
 			// Draw the boundingbox
 			cv::Scalar color(0, 0, 255);
 			int thickness = 3; int bbnum = 0;
+			nummm = 0;
+			group++;
 			for (auto it = BBVector.begin(); it != BBVector.end();) {
 				cv::Rect bb = *it;
 
@@ -289,9 +299,100 @@ TY_CAMERA_CALIB_INFO* read_calib(string path) {
 }
 
 bool isPostiveBB_BL(cv::Rect rec, cv::Mat depth_mat) {
-//	TYMapDepthToPoint3d(read_calib(calib_path), );
-    return true;
+	cv::Mat rigion = depth_mat(rec).clone();
+	cv::Mat bb_depth = cv::Mat::zeros(depth_mat.rows, depth_mat.cols, depth_mat.type());
+	//for (int i = 0; i < rigion.rows; i++) {
+	//	for (int j = 0; j < rigion.cols; j++) {
+	//		bb_depth.at<int32_t>(rec.x + i, rec.y + j) = rigion.at<int32_t>(i, j);
+	//	}
+	//}
+	std::vector<TY_VECT_3F> pc;
+	bb_depth = depth_mat;
+	pc.resize(bb_depth.size().area());
+	TYMapDepthImageToPoint3d(read_calib(calib_path), bb_depth.cols, bb_depth.rows
+					, (uint16_t*)bb_depth.data, &pc[0]);
+	std::string pa = point_cloud_path + std::to_string(group) + "//";
+	fs::create_directory(pa);
+	std::string f_path = pa + std::to_string(nummm++) + ".txt";
+	//std::string ff_path = pa + "kk" + std::to_string(nummm++) + ".txt";
+	//WriteData(f_path, depth_mat);
+	//WriteData(ff_path, rigion);
+	cv::Mat color;
+	writePointCloud((cv::Point3f*)&pc[0], (const cv::Vec3b*)color.data, pc.size(), f_path.c_str(), 0);
+	return true;
 }
+
+static void writePointCloud(const cv::Point3f* pnts, const cv::Vec3b* color, size_t n, const char* file, int format)
+{
+	FILE* fp = nullptr;
+	errno_t err = fopen_s(&fp, file, "w");
+	//if (err != 0) {
+	//	return;
+	//}
+
+	switch (format) {
+	case 0:
+		writePC_XYZ(pnts, color, n, fp);
+		break;
+	default:
+		break;
+	}
+
+	fclose(fp);
+}
+
+static void writePC_XYZ(const cv::Point3f* pnts, const cv::Vec3b* color, size_t n, FILE* fp)
+{
+	if (color) {
+		for (size_t i = 0; i < n; i++) {
+			if (!std::isnan(pnts[i].x)) {
+				fprintf(fp, "%f %f %f %d %d %d\n", pnts[i].x, pnts[i].y, pnts[i].z, color[i][0], color[i][1], color[i][2]);
+			}
+		}
+	}
+	else {
+		for (size_t i = 0; i < n; i++) {
+			if (!std::isnan(pnts[i].x)) {
+				fprintf(fp, "%f %f %f 0 0 0\n", pnts[i].x, pnts[i].y, pnts[i].z);
+			}
+		}
+	}
+}
+
+int WriteData(std::string fileName, cv::Mat& matData)
+{
+	int retVal = 0;
+
+	// 打开文件  
+	ofstream outFile(fileName.c_str(), ios_base::out);  //按新建或覆盖方式写入  
+	if (!outFile.is_open())
+	{
+		cout << "打开文件失败" << endl;
+		retVal = -1;
+		return (retVal);
+	}
+
+	// 检查矩阵是否为空  
+	if (matData.empty())
+	{
+		cout << "矩阵为空" << endl;
+		retVal = 1;
+		return (retVal);
+	}
+
+	// 写入数据  
+	for (int r = 0; r < matData.rows; r++)
+	{
+		for (int c = 0; c < matData.cols; c++)
+		{
+			int32_t data = matData.at<int32_t>(r, c);  //读取数据，at<type> - type 是矩阵元素的具体数据格式  
+			outFile << data << "\t";   //每列数据用 tab 隔开  
+		}
+		outFile << endl;  //换行  
+	}
+	return (retVal);
+}
+
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
 // Debug program: F5 or Debug > Start Debugging menu
 
