@@ -54,11 +54,16 @@ public:
     //返回对应位置的点
     vec_3d at(int position);
 
+    //返回平均x, y, 深度
+    double avex();
+    double avey();
+    double aved();
+
     //将图像转换为点云图
     void depth2PointCloud(cv::Mat mat);
 
     //写出点云信息
-    void writePointCloud(const char* path);
+    void writePointCloud(const char* path, int mod = 0);
 
 private:
     //点云结构体
@@ -85,6 +90,9 @@ bool isPostiveBB_BL(cv::Rect rec, cv::Mat depth_mat);
 
 //读取calib
 TY_CAMERA_CALIB_INFO* read_calib(std::string path);
+
+//在文件第一行写东西
+void writeFirstLine(const char* path, std::string content);
 
 //偷的
 static void writePointCloud(const cv::Point3f* pnts, const cv::Vec3b* color, size_t n, const char* file, int format);
