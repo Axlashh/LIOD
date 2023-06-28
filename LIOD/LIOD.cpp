@@ -200,6 +200,8 @@ int main()
 			cv::waitKey(pause_time);
 
 		}
+		init_seq++;
+		if (only_move) init_seq += 2;
 	}
 	delete t;
 	return 0;
@@ -309,40 +311,30 @@ bool isPostiveBB_BL(cv::Rect rec, cv::Mat depth_mat) {
 			bb_depth.at<int32_t>(rec.y + j, rec.x + i) = rigion.at<int32_t>(j, i);
 		}
 	}
+	/* Í¼ÑúµÄ×ª»»µãÔÆ
 	std::vector<TY_VECT_3F> pc;
 	pc.resize(bb_depth.size().area());
-	//TYMapDepthImageToPoint3d(read_calib(calib_path), bb_depth.cols, bb_depth.rows
-	//				, (uint16_t*)bb_depth.data, &pc[0]);
-	auto point3d = Depth2PointCloud(bb_depth);
+	TYMapDepthImageToPoint3d(read_calib(calib_path), bb_depth.cols, bb_depth.rows
+					, (uint16_t*)bb_depth.data, &pc[0]);*/
+	pt3d pc(bb_depth);
 	//std::string pa = point_cloud_path + std::to_string(group) + "//";
 	//fs::create_directory(pa);
 	//std::string f_path = pa + std::to_string(nummm++) + ".txt";
 	//writePointCloud(point3d, f_path.c_str());
-	if (point3d->size() == 0) return true;
-	long long y = point3d->at(0).y;
+	if (pc.size() == 0) return true;
+	long long y = pc.at(0).y;
 	cout << y << endl;
 	if (y < -500) return false;
 	return true;
-}
-
-void writePointCloud(const std::vector<vec_3d>* pnts, const char* file) {
-	FILE* fp = nullptr;
-	errno_t err = fopen_s(&fp, file, "w");
-	if (err) return;
-
-	for (auto& p : *pnts) {
-		fprintf(fp, "%f %f %f\n", p.x, p.y, p.z);
-	}
-	fclose(fp);
 }
 
 static void writePointCloud(const cv::Point3f* pnts, const cv::Vec3b* color, size_t n, const char* file, int format)
 {
 	FILE* fp = nullptr;
 	errno_t err = fopen_s(&fp, file, "w");
-	//if (err) {
-	//	return;
-	//}
+	if (err) {
+		return;
+	}
 
 	switch (format) {
 	case 0:
@@ -407,20 +399,53 @@ int WriteData(std::string fileName, cv::Mat& matData)
 	return (retVal);
 }
 
-std::vector<vec_3d>* Depth2PointCloud(cv::Mat depth_mat) {
-	std::vector<vec_3d>* ret = new std::vector<vec_3d>();
-	int x_cen = depth_mat.cols / 2;
-	int y_cen = depth_mat.rows / 2;
-	for (int i = 0; i < depth_mat.rows; i++) {
-		for (int j = 0; j < depth_mat.cols; j++) {
-			float dep = depth_mat.at<int32_t>(i, j);
+pt3d::pt3d() {
+	pc = new std::vector<vec_3d>();
+}
+
+pt3d::pt3d(cv::Mat mat) : pt3d() {
+	this->depth2PointCloud(mat);
+}
+
+pt3d::~pt3d() {
+	delete pc;
+}
+
+int pt3d::size() {
+	return pc->size();
+}
+
+std::vector<vec_3d>::iterator pt3d::iterator() {
+	return pc->begin();
+}
+
+vec_3d pt3d::at(int position) {
+	return pc->at(position);
+}
+
+void pt3d::depth2PointCloud(cv::Mat mat) {
+	int x_cen = mat.cols / 2;
+	int y_cen = mat.rows / 2;
+	for (int i = 0; i < mat.rows; i++) {
+		for (int j = 0; j < mat.cols; j++) {
+			float dep = mat.at<int32_t>(i, j);
 			if (!dep) continue;
 			float tx = (j - x_cen) * dep / fx;
 			float ty = (i - y_cen) * dep / fy;
-			ret->push_back({ tx, ty, dep });
+			pc->push_back({ tx, ty, dep });
 		}
 	}
-	return ret;
+}
+
+void pt3d::writePointCloud(const char* path) {
+	FILE* fp = nullptr;
+	errno_t err = fopen_s(&fp, path, "w");
+	if (err) return;
+
+	for (auto& p : *pc) {
+		fprintf(fp, "%f %f %f\n", p.x, p.y, p.z);
+	}
+	fclose(fp);
 }
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
 // Debug program: F5 or Debug > Start Debugging menu
