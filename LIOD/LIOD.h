@@ -43,7 +43,11 @@ public:
     //构造函数
     pt3d();
     pt3d(cv::Mat mat);
+    pt3d(const pt3d& other);
     ~pt3d();
+
+    //=运算符重载，傻逼
+    pt3d& operator=(const pt3d& other);
 
     //返回点云图中点的数量
     int size();
@@ -65,10 +69,12 @@ public:
     //写出点云信息
     void writePointCloud(const char* path, int mod = 0);
 
+    //返回是否为空
+    bool is_empty();
+
 private:
     //点云结构体
     std::vector<vec_3d>* pc;
-
 };
 
 
@@ -85,8 +91,8 @@ double cal_iou(Box box1, Box box2);
 // 计算 IoU 阈值下的正检个数
 int count_tp_by_iou_thresh(double iou_thresh, std::string gt_filepath, std::string pred_filepath);
 
-//判断是否为正检框，基础版本
-bool isPostiveBB_BL(cv::Rect rec, cv::Mat depth_mat);
+//筛选bb框,基础版本
+void fliterBB_BL(std::vector<cv::Rect> &BBVector, cv::Mat depth);
 
 //读取calib
 TY_CAMERA_CALIB_INFO* read_calib(std::string path);

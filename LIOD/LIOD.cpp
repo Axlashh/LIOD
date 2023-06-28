@@ -35,6 +35,8 @@ int seq_num = 1;
 int init_seq = 45;
 //only detect the movement(skip 2 seqences each time)
 bool only_move = true;
+//whether show pictures on screen
+bool show_pic = false;
 //the pause time between two pictures
 int pause_time = 1;
 //camera static
@@ -62,10 +64,10 @@ int main()
 		tseq << "seq" << std::setfill('0') << std::setw(2) << std::to_string(init_seq);
 		std::string seq = tseq.str();
 		input_depthPath = input_path + seq + "\\depth\\";
-		input_gt_bbPath = input_path + seq + "\\gt__bb\\";
+		input_gt_bbPath = input_path + seq + "\\gt_bb\\";
 		input_imagePath = input_path + seq + "\\images\\";
 		output_imagePath = output_path + seq + "\\images\\";
-		output_bboxPath = output_path + seq + "\\pred__bb\\";
+		output_bboxPath = output_path + seq + "\\pred_bb\\";
 		point_cloud_path = output_path + seq + "\\point_clouds\\";
 		fs::create_directories(output_imagePath);
 		fs::create_directories(output_bboxPath);
@@ -108,16 +110,13 @@ int main()
 			// Draw the boundingbox
 			cv::Scalar color(0, 0, 255);
 			int thickness = 3; int bbnum = 0;
-			nummm = 0;
 			group++;
+
+			//fliter
+			fliterBB_BL(BBVector, depth_mat);
+
 			for (auto it = BBVector.begin(); it != BBVector.end();) {
 				cv::Rect bb = *it;
-
-				if (!isPostiveBB_BL(bb, depth_mat)) {
-					it = BBVector.erase(it);
-					continue;
-				}
-
 				rectangle(image_mat, bb.tl(), bb.br(), color, thickness);
 
 				//求深度平均    
@@ -196,9 +195,10 @@ int main()
 			cv::imwrite(output_imageFileName, image_mat);
 
 			// Show image
-			//cv::imshow("current image", image_mat);
-			//cv::waitKey(pause_time);
-
+			if (show_pic) {
+				cv::imshow("current image", image_mat);
+				cv::waitKey(pause_time);
+			}
 		}
 		init_seq++;
 		if (only_move) init_seq += 2;
@@ -303,33 +303,79 @@ TY_CAMERA_CALIB_INFO* read_calib(string path) {
 	return ret;
 }
 
-bool isPostiveBB_BL(cv::Rect rec, cv::Mat depth_mat) {
-	std::string path = point_cloud_path + std::to_string(group) + "\\";
-	fs::create_directory(path);
-	std::string filep = path + std::to_string(++nummm) + ".txt";
-	cv::Mat rigion = depth_mat(rec).clone();
-	cv::Mat bb_depth = cv::Mat::zeros(depth_mat.rows, depth_mat.cols, depth_mat.type());
-	for (int i = 0; i < rigion.cols; i++) {
-		for (int j = 0; j < rigion.rows; j++) {
-			bb_depth.at<int32_t>(rec.y + j, rec.x + i) = rigion.at<int32_t>(j, i);
+void fliterBB_BL(std::vector<cv::Rect> &BBVector, cv::Mat depth) {
+
+
+	//transform to point clouds
+	std::vector<pt3d> boxPC(0);
+
+	double avex = 0;
+	double stddevx = 0;
+	for (auto& BB : BBVector) {
+		cv::Mat rigion = depth(BB).clone();
+		cv::Mat bb_depth = cv::Mat::zeros(depth.rows, depth.cols, depth.type());
+		for (int i = 0; i < rigion.cols; i++) {
+			for (int j = 0; j < rigion.rows; j++) {
+				bb_depth.at<int32_t>(BB.y + j, BB.x + i) = rigion.at<int32_t>(j, i);
+			}
+		}
+		pt3d temp(bb_depth);
+		if (!temp.is_empty()) {
+			boxPC.push_back(temp);
 		}
 	}
-	/* 图漾的转换点云
-	std::vector<TY_VECT_3F> pc;
-	pc.resize(bb_depth.size().area());
-	TYMapDepthImageToPoint3d(read_calib(calib_path), bb_depth.cols, bb_depth.rows
-					, (uint16_t*)bb_depth.data, &pc[0]);*/
-	//std::string pa = point_cloud_path + std::to_string(group) + "//";
-	//fs::create_directory(pa);
-	//std::string f_path = pa + std::to_string(nummm++) + ".txt";
-	//writePointCloud(point3d, f_path.c_str());
-	pt3d pc(bb_depth);
-	if (pc.size() == 0) return true;
-	long long y = pc.at(0).y;
-	cout << y << endl;
-	if (y < -500) return false;
-	pc.writePointCloud(filep.c_str(), 1);
-	return true;
+
+	//delete the bb above
+	std::vector<cv::Rect>::iterator bbit = BBVector.begin();
+	std::vector<pt3d>::iterator pcit = boxPC.begin();
+	while (pcit != boxPC.end()) {
+		if (pcit->avey() < -400) {
+			bbit = BBVector.erase(bbit);
+			pcit = boxPC.erase(pcit);
+			continue;
+		}
+		else {
+			bbit++;
+			pcit++;
+		}
+	}
+
+	for (auto& a : boxPC) {
+		avex += a.avex();
+	}
+
+	//get the statistical information
+	avex /= boxPC.size();
+	for (auto& pc : boxPC) {
+		stddevx += pow(pc.avex() - avex, 2);
+	}
+	stddevx /= boxPC.size();
+	stddevx = sqrt(stddevx);
+
+	//fliter the bb through x
+	double up = 0.6 * avex + 0.8 * stddevx;
+	double down = 0.6 * avex - 0.8 * stddevx;
+	bbit = BBVector.begin();
+	pcit = boxPC.begin();
+	while (pcit != boxPC.end()) {
+		if (pcit->avex() > up || pcit->avex() < down) {
+			bbit = BBVector.erase(bbit);
+			pcit = boxPC.erase(pcit);
+			continue;
+		}
+		bbit++;
+		pcit++;
+	}
+
+	//output path
+	nummm = 0;
+	std::string path = point_cloud_path + std::to_string(group) + "\\";
+	fs::create_directory(path);
+	for (auto& it : boxPC) {
+		std::string pp = path + std::to_string(nummm++) + ".txt";
+		it.writePointCloud(pp.c_str(), 1);
+	}
+	
 }
 
 void writeFirstLine(const char* path, std::string content) {
@@ -422,16 +468,43 @@ pt3d::pt3d() {
 	pc = new std::vector<vec_3d>();
 }
 
-pt3d::pt3d(cv::Mat mat) : pt3d() {
+pt3d::pt3d(cv::Mat mat) : pt3d(){
 	this->depth2PointCloud(mat);
+}
+
+pt3d::pt3d(const pt3d& other) {
+	pc = new std::vector<vec_3d>(*other.pc);
 }
 
 pt3d::~pt3d() {
 	delete pc;
 }
 
+pt3d& pt3d::operator=(const pt3d& other) {
+	// 检查是否自赋值
+	if (this == &other) {
+		return *this;
+	}
+
+	// 创建临时对象进行深拷贝
+	std::vector<vec_3d>* temp = new std::vector<vec_3d>(*other.pc);
+
+	// 释放当前对象持有的资源
+	delete pc;
+
+	// 将临时对象的指针赋值给当前对象的 pc 指针
+	pc = temp;
+
+	return *this;
+}
+
+
 int pt3d::size() {
 	return pc->size();
+}
+
+bool pt3d::is_empty() {
+	return this->size() == 0;
 }
 
 double pt3d::avex() {
