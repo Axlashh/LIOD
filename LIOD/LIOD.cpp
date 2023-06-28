@@ -320,51 +320,7 @@ void fliterBB_BL(std::vector<cv::Rect> &BBVector, cv::Mat depth) {
 			}
 		}
 		pt3d temp(bb_depth);
-		if (!temp.is_empty()) {
-			boxPC.push_back(temp);
-		}
-	}
-
-	//delete the bb above
-	std::vector<cv::Rect>::iterator bbit = BBVector.begin();
-	std::vector<pt3d>::iterator pcit = boxPC.begin();
-	while (pcit != boxPC.end()) {
-		if (pcit->avey() < -400) {
-			bbit = BBVector.erase(bbit);
-			pcit = boxPC.erase(pcit);
-			continue;
-		}
-		else {
-			bbit++;
-			pcit++;
-		}
-	}
-
-	for (auto& a : boxPC) {
-		avex += a.avex();
-	}
-
-	//get the statistical information
-	avex /= boxPC.size();
-	for (auto& pc : boxPC) {
-		stddevx += pow(pc.avex() - avex, 2);
-	}
-	stddevx /= boxPC.size();
-	stddevx = sqrt(stddevx);
-
-	//fliter the bb through x
-	double up = 0.6 * avex + 0.8 * stddevx;
-	double down = 0.6 * avex - 0.8 * stddevx;
-	bbit = BBVector.begin();
-	pcit = boxPC.begin();
-	while (pcit != boxPC.end()) {
-		if (pcit->avex() > up || pcit->avex() < down) {
-			bbit = BBVector.erase(bbit);
-			pcit = boxPC.erase(pcit);
-			continue;
-		}
-		bbit++;
-		pcit++;
+		boxPC.push_back(temp);
 	}
 
 	//output path
@@ -375,6 +331,58 @@ void fliterBB_BL(std::vector<cv::Rect> &BBVector, cv::Mat depth) {
 		std::string pp = path + std::to_string(nummm++) + ".txt";
 		it.writePointCloud(pp.c_str(), 1);
 	}
+
+	//delete the bb above
+	std::vector<cv::Rect>::iterator bbit = BBVector.begin();
+	std::vector<pt3d>::iterator pcit = boxPC.begin();
+	while (pcit != boxPC.end()) {
+		if (!pcit->is_empty() && pcit->avey() < -400) {
+			bbit = BBVector.erase(bbit);
+			pcit = boxPC.erase(pcit);
+			continue;
+		}
+		else {
+			bbit++;
+			pcit++;
+		}
+	}
+
+
+	int count = 0;
+	for (auto& a : boxPC) {
+		if (!a.is_empty()) {
+			count++;
+			avex += a.avex();
+		}
+	}
+
+	//get the statistical information
+	avex /= count;
+	for (auto& pc : boxPC) {
+		if (!pc.is_empty()) {
+			stddevx += pow(pc.avex() - avex, 2);
+		}
+	}
+	stddevx /= count;
+	stddevx = sqrt(stddevx);
+
+	//fliter the bb through x
+	double up = 0.6 * avex + 0.8 * stddevx;
+	double down = 0.6 * avex - 0.8 * stddevx;
+	bbit = BBVector.begin();
+	pcit = boxPC.begin();
+	while (pcit != boxPC.end()) {
+		
+		if (!pcit->is_empty() && (pcit->avex() > up || pcit->avex() < down)) {
+			bbit = BBVector.erase(bbit);
+			pcit = boxPC.erase(pcit);
+			continue;
+		}
+		bbit++;
+		pcit++;
+	}
+
+
 	
 }
 
