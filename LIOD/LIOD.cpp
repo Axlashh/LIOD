@@ -7,49 +7,30 @@ using namespace std;
 using cv::Scalar;
 using cv::Point;
 
-int group = 0;
-int nummm = 0;
-time_t timep;
-struct tm* t;
-
-// input info
-std::string input_depthPath;
-std::string input_gt_bbPath;
-std::string input_imagePath;
-// output info
-std::string output_imagePath;
-std::string output_bboxPath;
-double iou_thresh = 0.3f;
-
-std::string output_path;
-std::string input_path = "D:\\AAAAAAA\\documents\\scitri\\data\\input\\";
-std::string calib_path = "D:\\AAAAAAA\\documents\\scitri\\data\\calib\\1.txt";
-std::string point_cloud_path = "D:\\AAAAAAA\\documents\\scitri\\data\\point_cloud\\";
-
-char tout[200];
-const char* out = "D:\\AAAAAAA\\documents\\scitri\\data\\output\\%d_%d_%d_%d_%02d\\";
-
-//the number of seqence to be detected
-int seq_num = 1;
-//the initial seqence
-int init_seq = 45;
-//only detect the movement(skip 2 seqences each time)
-bool only_move = true;
-//whether show pictures on screen
-bool show_pic = false;
-//the pause time between two pictures
-int pause_time = 1;
-//camera static
-int fx = 100;
-int fy = 100;
-
-int main()
+int LIOD(std::string input_path, std::string output_path, double iou_thresh, 
+	int init_seq, int seq_num, int pic_num, std::vector<int> det_seq, bool only_move, bool show_pic,
+	int fx, int fy)
 {
+	int group = 0;
+	time_t timep;
+	struct tm* t;
+	// input info
+	std::string input_depthPath;
+	std::string input_gt_bbPath;
+	std::string input_imagePath;
+	// output info
+	std::string output_imagePath;
+	std::string output_bboxPath;
+	std::string point_cloud_path;
+	output_path = output_path + "%d_%d_%d_%d_%02d\\";
+	char tout[100];
+	char out[90];
+	strcpy_s(out, output_path.c_str());
 	//create the output directory with time information
 	time(&timep);
 	t = new struct tm; 
 	localtime_s(t, &timep);
-    sprintf_s(tout, sizeof(tout), out, 1900 + t->tm_year,1 + t->tm_mon, t->tm_wday, t->tm_hour, t->tm_min);
+    sprintf_s(tout, 90, out, 1900 + t->tm_year,1 + t->tm_mon, t->tm_wday, t->tm_hour, t->tm_min);
     output_path = tout;
  	if (!fs::exists(output_path)) {
 		fs::create_directory(output_path);
@@ -58,8 +39,19 @@ int main()
     // Read each line of the list file and load the corresponding image file.
     std::string image_fullfilename;
     std::vector<cv::Rect> BBVector;
+
+	if (!det_seq.empty()) {
+		seq_num = -1;
+	}
+	auto seq_it = det_seq.begin();
+
 	while (seq_num--) {
 		//get the corresponding seqence
+		if (seq_num < 0) {
+			if (seq_it == det_seq.end()) break;
+			init_seq = *seq_it;
+			seq_it++;
+		}
 		std::ostringstream tseq;
 		tseq << "seq" << std::setfill('0') << std::setw(2) << std::to_string(init_seq);
 		std::string seq = tseq.str();
@@ -80,8 +72,11 @@ int main()
 				files.push_back(f.path().string());
 		}
 
+		int pic_count = 0;
+
 		//iterate all the files
 		for (auto& image_fullfilename : files) {
+			if (pic_count++ == pic_num) break;
 			fs::path p(image_fullfilename);
 			std::string fileName = p.filename().string();
 			size_t dotPos = fileName.find_last_of(".");
@@ -113,7 +108,7 @@ int main()
 			group++;
 
 			//fliter
-			fliterBB_BL(BBVector, depth_mat);
+			fliterBB_BL(BBVector, depth_mat, group, point_cloud_path);
 
 			for (auto it = BBVector.begin(); it != BBVector.end();) {
 				cv::Rect bb = *it;
@@ -197,7 +192,7 @@ int main()
 			// Show image
 			if (show_pic) {
 				cv::imshow("current image", image_mat);
-				cv::waitKey(pause_time);
+				cv::waitKey(40);
 			}
 		}
 		init_seq++;
@@ -303,9 +298,7 @@ TY_CAMERA_CALIB_INFO* read_calib(string path) {
 	return ret;
 }
 
-void fliterBB_BL(std::vector<cv::Rect> &BBVector, cv::Mat depth) {
-
-
+void fliterBB_BL(std::vector<cv::Rect> &BBVector, cv::Mat depth, int group, std::string point_cloud_path, int fx, int fy) {
 	//transform to point clouds
 	std::vector<pt3d> boxPC(0);
 
@@ -319,12 +312,12 @@ void fliterBB_BL(std::vector<cv::Rect> &BBVector, cv::Mat depth) {
 				bb_depth.at<int32_t>(BB.y + j, BB.x + i) = rigion.at<int32_t>(j, i);
 			}
 		}
-		pt3d temp(bb_depth);
+		pt3d temp(bb_depth, fx, fy);
 		boxPC.push_back(temp);
 	}
 
 	//output path
-	nummm = 0;
+	int nummm = 0;
 	std::string path = point_cloud_path + std::to_string(group) + "\\";
 	fs::create_directory(path);
 	for (auto& it : boxPC) {
@@ -381,8 +374,6 @@ void fliterBB_BL(std::vector<cv::Rect> &BBVector, cv::Mat depth) {
 		bbit++;
 		pcit++;
 	}
-
-
 	
 }
 
@@ -476,8 +467,8 @@ pt3d::pt3d() {
 	pc = new std::vector<vec_3d>();
 }
 
-pt3d::pt3d(cv::Mat mat) : pt3d(){
-	this->depth2PointCloud(mat);
+pt3d::pt3d(cv::Mat mat, int fx, int fy) : pt3d(){
+	this->depth2PointCloud(mat, fx, fy);
 }
 
 pt3d::pt3d(const pt3d& other) {
@@ -549,7 +540,7 @@ vec_3d pt3d::at(int position) {
 	return pc->at(position);
 }
 
-void pt3d::depth2PointCloud(cv::Mat mat) {
+void pt3d::depth2PointCloud(cv::Mat mat, int fx, int fy) {
 	int x_cen = mat.cols / 2;
 	int y_cen = mat.rows / 2;
 	for (int i = 0; i < mat.rows; i++) {

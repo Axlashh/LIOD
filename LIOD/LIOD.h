@@ -42,7 +42,7 @@ class pt3d {
 public:    
     //构造函数
     pt3d();
-    pt3d(cv::Mat mat);
+    pt3d(cv::Mat mat, int fx = 100, int fy = 100);
     pt3d(const pt3d& other);
     ~pt3d();
 
@@ -64,7 +64,7 @@ public:
     double aved();
 
     //将图像转换为点云图
-    void depth2PointCloud(cv::Mat mat);
+    void depth2PointCloud(cv::Mat mat, int fx = 100, int fy = 100);
 
     //写出点云信息
     void writePointCloud(const char* path, int mod = 0);
@@ -77,6 +77,16 @@ private:
     std::vector<vec_3d>* pc;
 };
 
+//  init_seq:   the initial seqence
+//  seq_num:    the number of seqences to be detected
+//  pic_num:    the number of pictures to be detected in every seqence
+//  det_seq:    if not empty, the programe will detect the seqences in this vector
+//  only_move:  whether to skip the still seqence
+//  show_pic:   whether to show the pictures
+//  fx, fy:     the conversion factor of point cloud
+int LIOD(std::string input_path, std::string output_path, double iou_thresh,
+    int init_seq, int seq_num, int pic_num = 300, std::vector<int> det_seq = {}, bool only_move = true, bool show_pic = false,
+    int fx = 100, int fy = 100);
 
 YOLO_RECT COCO2YOLO(cv::Rect coco_rect, int width, int height);
 
@@ -92,7 +102,8 @@ double cal_iou(Box box1, Box box2);
 int count_tp_by_iou_thresh(double iou_thresh, std::string gt_filepath, std::string pred_filepath);
 
 //筛选bb框,基础版本
-void fliterBB_BL(std::vector<cv::Rect> &BBVector, cv::Mat depth);
+void fliterBB_BL(std::vector<cv::Rect> &BBVector, cv::Mat depth, int group,
+    std::string point_cloud_path, int fx = 100, int fy = 100);
 
 //读取calib
 TY_CAMERA_CALIB_INFO* read_calib(std::string path);
