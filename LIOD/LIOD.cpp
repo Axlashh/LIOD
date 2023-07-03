@@ -67,11 +67,8 @@ void LIOD(cv::Mat depth_mat, cv::Mat image_mat, std::string output_path, int ind
 
 int LIOD(std::string input_path, std::string output_path, double iou_thresh, 
 	int init_seq, int seq_num, int pic_num, std::vector<int>* det_seq, bool only_move, bool show_pic,
-	int fx, int fy)
-{
+	int fx, int fy){
 	int group = 0;
-	time_t timep;
-	struct tm* t;
 	// input info
 	std::string input_depthPath;
 	std::string input_gt_bbPath;
@@ -80,20 +77,6 @@ int LIOD(std::string input_path, std::string output_path, double iou_thresh,
 	std::string output_imagePath;
 	std::string output_bboxPath;
 	std::string point_cloud_path;
-	output_path = output_path + "%d_%d_%d_%d_%02d\\";
-	char tout[100];
-	char out[90];
-	strcpy_s(out, output_path.c_str());
-	//create the output directory with time information
-	time(&timep);
-	t = new struct tm; 
-	localtime_s(t, &timep);
-    sprintf_s(tout, 90, out, 1900 + t->tm_year,1 + t->tm_mon, t->tm_mday, t->tm_hour, t->tm_min);
-    output_path = tout;
- 	if (!fs::exists(output_path)) {
-		fs::create_directory(output_path);
-	}
-
     // Read each line of the list file and load the corresponding image file.
     std::string image_fullfilename;
     std::vector<cv::Rect> BBVector;
@@ -133,6 +116,7 @@ int LIOD(std::string input_path, std::string output_path, double iou_thresh,
 		}
 
 		int pic_count = 0;
+		group = 0;
 
 		//iterate all the files
 		for (auto& image_fullfilename : files) {
@@ -204,7 +188,7 @@ int LIOD(std::string input_path, std::string output_path, double iou_thresh,
 		init_seq++;
 		if (only_move) init_seq += 2;
 	}
-	delete t;
+
 	return 0;
 }
 
@@ -313,13 +297,9 @@ void fliterBB_BL(std::vector<cv::Rect> &BBVector, cv::Mat depth, int group, std:
 	for (auto& BB : BBVector) {
 		cv::Mat rigion = depth(BB).clone();
 		cv::Mat bb_depth = cv::Mat::zeros(depth.rows, depth.cols, depth.type());
-		for (int i = 0; i < rigion.rows; i++) {
-			int32_t* rigion_row = rigion.ptr<int32_t>(i);
-			int32_t* bb_depth_row = bb_depth.ptr<int32_t>(i + BB.y);
-			for (int j = 0; j < rigion.cols; j++) {
-				*bb_depth_row = *rigion_row;
-				bb_depth_row++;
-				rigion_row++;
+		for (int i = 0; i < rigion.cols; i++) {
+			for (int j = 0; j < rigion.rows; j++) {
+				bb_depth.at<int32_t>(BB.y + j, BB.x + i) = rigion.at<int32_t>(j, i);
 			}
 		}
 		pt3d temp(bb_depth, fx, fy);
@@ -350,6 +330,7 @@ void fliterBB_BL(std::vector<cv::Rect> &BBVector, cv::Mat depth, int group, std:
 		}
 	}
 
+	if (boxPC.size() == 1) return;
 
 	int count = 0;
 	for (auto& a : boxPC) {
