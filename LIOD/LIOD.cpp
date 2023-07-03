@@ -1,11 +1,69 @@
 // LIOD.cpp : This file contains the 'main' function. Program execution begins and ends there.
 #include "LIOD.h"
+#include"Vis.h"
+#include"Detect.h"
+#include"TOD.h"
 #define _CRT_SECURE_NO_WARNINGS
 
 namespace fs = std::filesystem;
 using namespace std;
 using cv::Scalar;
 using cv::Point;
+
+void LIOD(cv::Mat depth_mat, cv::Mat image_mat, std::string output_path, int index, double iou_thresh, bool show_pic, int fx, int fy) {
+	std::string output_imagePath = output_path + "\\images\\";
+	std::string output_bboxPath = output_path + "\\pred_bb\\";
+	std::string point_cloud_path = output_path + "\\point_clouds\\";
+	fs::create_directories(output_imagePath);
+	fs::create_directories(output_bboxPath);
+	fs::create_directories(point_cloud_path);
+
+	std::string idx = std::to_string(index);
+	int width = image_mat.cols;
+	int height = image_mat.rows;
+
+	// Procecessing
+	// Detection
+	clock_t start = clock();
+	std::vector<cv::Rect> BBVector = Detect(image_mat, depth_mat, width, height, true, true);
+	clock_t end = clock();
+	double elapsed_secs = double(end - start) / CLOCKS_PER_SEC;
+
+	// Draw the boundingbox
+	cv::Scalar color(0, 0, 255);
+	int thickness = 3; int bbnum = 0;
+
+	//fliter
+	fliterBB_BL(BBVector, depth_mat, index, point_cloud_path);
+
+	for (auto it = BBVector.begin(); it != BBVector.end();) {
+		cv::Rect bb = *it;
+		rectangle(image_mat, bb.tl(), bb.br(), color, thickness);
+		cal_mdepth(bb, depth_mat, image_mat);
+		it++;
+	}
+	// Write image and bbox to files
+
+	std::string output_bboxFileName = output_bboxPath + idx + ".txt";
+	std::ofstream bboxFile(output_bboxFileName);
+	for (auto& bb : BBVector) {
+		YOLO_RECT yolo_rect = COCO2YOLO(bb, width, height);
+		bboxFile << 0 << ' ' << yolo_rect.x_center << ' ' << yolo_rect.y_center << ' ' << yolo_rect.width << ' ' << yolo_rect.height << "\n";
+	}
+	bboxFile.close();
+
+	time_targeted(bbnum, elapsed_secs, image_mat, false);
+
+	// Write image and bbox to files
+	std::string output_imageFileName = output_imagePath + idx + ".jpg";
+	cv::imwrite(output_imageFileName, image_mat);
+
+	// Show image
+	if (show_pic) {
+		cv::imshow("current image", image_mat);
+		cv::waitKey(40);
+	}
+}
 
 int LIOD(std::string input_path, std::string output_path, double iou_thresh, 
 	int init_seq, int seq_num, int pic_num, std::vector<int>* det_seq, bool only_move, bool show_pic,
@@ -87,6 +145,7 @@ int LIOD(std::string input_path, std::string output_path, double iou_thresh,
 
 			// Read image from a file
 			cv::Mat image_mat = cv::imread(image_fullfilename);
+			image_mat.convertTo(image_mat, CV_8UC1);
 			if (image_mat.empty()) {
 				std::cerr << "Error: could not load image file " << image_fullfilename << ".\n";
 				return 1;
@@ -115,48 +174,7 @@ int LIOD(std::string input_path, std::string output_path, double iou_thresh,
 			for (auto it = BBVector.begin(); it != BBVector.end();) {
 				cv::Rect bb = *it;
 				rectangle(image_mat, bb.tl(), bb.br(), color, thickness);
-
-				//求深度平均    
-				int startRow = bb.y;  // 指定计算平均值开始的行号
-				int endRow = bb.y + bb.height;  // 指定计算平均值结束的行号
-				int startCol = bb.x;  // 指定计算平均值开始的列号
-				int endCol = bb.x + bb.width;  // 指定计算平均值结束的列号
-
-				double sum = 0.0;  // 指定区域内深度信息的总和
-				double averageValue = 0.0;  // 指定区域内深度信息的平均值
-				int dnum = 0;
-				for (int i = startRow; i < endRow; ++i) {
-					for (int j = startCol; j < endCol; ++j) {
-						sum += depth_mat.at<int>(i, j);  // 计算指定区域内深度信息的总和
-						if (depth_mat.at<int>(i, j) != 0) {
-							dnum++;
-						}
-					}
-				}
-				if (dnum == 0) averageValue = 0;
-				else averageValue = sum / dnum;
-				//averageValue = sum / ((endRow - startRow + 1) * (endCol - startCol + 1));  // 除以总个数，得到平均值
-
-				// 定义要添加的文字内容和位置
-				std::ostringstream ss1, ss2;
-				ss1 << "A:" << (int)bb.area();
-				ss2 << "D:" << (int)averageValue;
-				string text1 = ss1.str();
-				string text2 = ss2.str();
-				Point pos1(bb.x, bb.y - 5);
-				Point pos2(bb.x, bb.y - 18);
-
-				// 定义字体类型和大小
-				int fontface = cv::FONT_HERSHEY_SIMPLEX;
-				double fontsize = 0.4;
-
-				// 定义文字的颜色和厚度
-				Scalar t_color(255, 192, 203);
-				int t_thickness = 0.6;
-
-				// 在图片上添加文字
-				cv::putText(image_mat, text1, pos1, fontface, fontsize, t_color, t_thickness);
-				cv::putText(image_mat, text2, pos2, fontface, fontsize, t_color, t_thickness);
+				cal_mdepth(bb, depth_mat, image_mat);
 
 				it++;
 			}
@@ -171,21 +189,7 @@ int LIOD(std::string input_path, std::string output_path, double iou_thresh,
 			bboxFile.close();
 
 			bbnum = count_tp_by_iou_thresh(iou_thresh, input_gt_bbPath + fileName.substr(0, dotPos) + ".txt", output_bboxFileName);
-			// 击中数和处理时间
-			std::ostringstream ss3;
-			ss3 << "hits = " << bbnum << " " << "time=" << elapsed_secs * 1000 << "ms";
-			string text3 = ss3.str();
-			Point pos3(10, 30);
-
-			// 定义字体类型和大小
-			int fontface = cv::FONT_HERSHEY_SIMPLEX;
-			double fontsize = 0.8;
-
-			// 定义文字的颜色和厚度
-			Scalar t_color(255, 192, 203);
-			int t_thickness = 2;
-
-			cv::putText(image_mat, text3, pos3, fontface, fontsize, t_color, t_thickness);
+			time_targeted(bbnum, elapsed_secs, image_mat, false);
 
 			// Write image and bbox to files
 			std::string output_imageFileName = output_imagePath + fileName.substr(0, dotPos) + ".jpg";
@@ -309,9 +313,13 @@ void fliterBB_BL(std::vector<cv::Rect> &BBVector, cv::Mat depth, int group, std:
 	for (auto& BB : BBVector) {
 		cv::Mat rigion = depth(BB).clone();
 		cv::Mat bb_depth = cv::Mat::zeros(depth.rows, depth.cols, depth.type());
-		for (int i = 0; i < rigion.cols; i++) {
-			for (int j = 0; j < rigion.rows; j++) {
-				bb_depth.at<int32_t>(BB.y + j, BB.x + i) = rigion.at<int32_t>(j, i);
+		for (int i = 0; i < rigion.rows; i++) {
+			int32_t* rigion_row = rigion.ptr<int32_t>(i);
+			int32_t* bb_depth_row = bb_depth.ptr<int32_t>(i + BB.y);
+			for (int j = 0; j < rigion.cols; j++) {
+				*bb_depth_row = *rigion_row;
+				bb_depth_row++;
+				rigion_row++;
 			}
 		}
 		pt3d temp(bb_depth, fx, fy);
@@ -429,40 +437,6 @@ static void writePC_XYZ(const cv::Point3f* pnts, const cv::Vec3b* color, size_t 
 			}
 		}
 	}
-}
-
-int WriteData(std::string fileName, cv::Mat& matData)
-{
-	int retVal = 0;
-
-	// 打开文件  
-	ofstream outFile(fileName.c_str(), ios_base::out);  //按新建或覆盖方式写入  
-	if (!outFile.is_open())
-	{
-		cout << "打开文件失败" << endl;
-		retVal = -1;
-		return (retVal);
-	}
-
-	// 检查矩阵是否为空  
-	if (matData.empty())
-	{
-		cout << "矩阵为空" << endl;
-		retVal = 1;
-		return (retVal);
-	}
-
-	// 写入数据  
-	for (int r = 0; r < matData.rows; r++)
-	{
-		for (int c = 0; c < matData.cols; c++)
-		{
-			int32_t data = matData.at<int32_t>(r, c);  //读取数据，at<type> - type 是矩阵元素的具体数据格式  
-			outFile << data << "\t";   //每列数据用 tab 隔开  
-		}
-		outFile << endl;  //换行  
-	}
-	return (retVal);
 }
 
 pt3d::pt3d() {

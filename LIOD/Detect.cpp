@@ -26,15 +26,16 @@ std::vector<cv::Rect> Detect(cv::Mat image_mat, cv::Mat depth_mat, int image_wid
     std::vector<cv::Rect> BBVect3;
     
     // 双边滤波，转换为灰度图像
-    cv::Mat gray;
-    bilateralFilter(image_mat, gray, 13, 300, 200);
-    cvtColor(gray, gray, cv::COLOR_BGR2GRAY);
+    cv::Mat gray,grayy;
+    bilateralFilter(image_mat, grayy, 13, 300, 200);
+    grayy.convertTo(grayy, CV_8UC1);
+    //cvtColor(gray, gray, cv::COLOR_BGR2GRAY);
 
     // 对比度拉伸
     //normalize(gray, gray, 0, 255, cv::NORM_MINMAX);
 
     // 边缘检测
-    Canny(gray, gray, 100, 200);
+    Canny(grayy, gray, 100, 200);
 
     // 查找轮廓
     std::vector<std::vector<cv::Point>> contours;

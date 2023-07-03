@@ -8,6 +8,6 @@ int main() {
 
 	std::string output_path = "D:\\AAAAAAA\\documents\\scitri\\data\\output\\";
 	std::string input_path = "D:\\AAAAAAA\\documents\\scitri\\data\\input\\";
-	LIOD(input_path, output_path, iou_thresh, 3, 20, 1);
+	LIOD(input_path, output_path, iou_thresh, 45, 1, 30);
 	delete det_seq;
 }
