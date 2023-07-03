@@ -39,11 +39,13 @@ int LIOD(std::string input_path, std::string output_path, double iou_thresh,
     // Read each line of the list file and load the corresponding image file.
     std::string image_fullfilename;
     std::vector<cv::Rect> BBVector;
+	std::vector<int>::iterator seq_it;
 
 	if (det_seq != nullptr && !det_seq->empty()) {
 		seq_num = -1;
+		seq_it = det_seq->begin();
 	}
-	auto seq_it = det_seq->begin();
+	
 
 	while (seq_num--) {
 		//get the corresponding seqence

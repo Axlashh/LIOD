@@ -1,6 +1,4 @@
 #pragma once
-#ifndef __LIOD__
-#define __LIOD__
 
 #include <iostream>
 #include <fstream>
@@ -115,5 +113,3 @@ void writeFirstLine(const char* path, std::string content);
 static void writePointCloud(const cv::Point3f* pnts, const cv::Vec3b* color, size_t n, const char* file, int format);
 static void writePC_XYZ(const cv::Point3f* pnts, const cv::Vec3b* color, size_t n, FILE* fp);
 int WriteData(std::string fileName, cv::Mat& matData);
-
-#endif
