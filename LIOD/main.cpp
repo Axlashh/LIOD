@@ -3,7 +3,7 @@
 #include "Detect.h"
 
 int main() {
-	std::vector<int> det_seq = {3, 6, 9};
+	std::vector<int>* det_seq = new std::vector<int>{ 3, 6, 9 };
 	double iou_thresh = 0.3f;
 
 	std::string output_path = "D:\\AAAAAAA\\documents\\scitri\\data\\output\\";

@@ -8,7 +8,7 @@ using cv::Scalar;
 using cv::Point;
 
 int LIOD(std::string input_path, std::string output_path, double iou_thresh, 
-	int init_seq, int seq_num, int pic_num, std::vector<int> det_seq, bool only_move, bool show_pic,
+	int init_seq, int seq_num, int pic_num, std::vector<int>* det_seq, bool only_move, bool show_pic,
 	int fx, int fy)
 {
 	int group = 0;
@@ -30,7 +30,7 @@ int LIOD(std::string input_path, std::string output_path, double iou_thresh,
 	time(&timep);
 	t = new struct tm; 
 	localtime_s(t, &timep);
-    sprintf_s(tout, 90, out, 1900 + t->tm_year,1 + t->tm_mon, t->tm_wday, t->tm_hour, t->tm_min);
+    sprintf_s(tout, 90, out, 1900 + t->tm_year,1 + t->tm_mon, t->tm_mday, t->tm_hour, t->tm_min);
     output_path = tout;
  	if (!fs::exists(output_path)) {
 		fs::create_directory(output_path);
@@ -40,15 +40,15 @@ int LIOD(std::string input_path, std::string output_path, double iou_thresh,
     std::string image_fullfilename;
     std::vector<cv::Rect> BBVector;
 
-	if (!det_seq.empty()) {
+	if (det_seq != nullptr && !det_seq->empty()) {
 		seq_num = -1;
 	}
-	auto seq_it = det_seq.begin();
+	auto seq_it = det_seq->begin();
 
 	while (seq_num--) {
 		//get the corresponding seqence
 		if (seq_num < 0) {
-			if (seq_it == det_seq.end()) break;
+			if (seq_it == det_seq->end()) break;
 			init_seq = *seq_it;
 			seq_it++;
 		}

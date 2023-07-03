@@ -85,7 +85,7 @@ private:
 //  show_pic:   whether to show the pictures
 //  fx, fy:     the conversion factor of point cloud
 int LIOD(std::string input_path, std::string output_path, double iou_thresh,
-    int init_seq, int seq_num, int pic_num = 300, std::vector<int> det_seq = {}, bool only_move = true, bool show_pic = false,
+    int init_seq, int seq_num, int pic_num = 300, std::vector<int>* det_seq = nullptr, bool only_move = true, bool show_pic = false,
     int fx = 100, int fy = 100);
 
 YOLO_RECT COCO2YOLO(cv::Rect coco_rect, int width, int height);
